@@ -1,17 +1,21 @@
 const net = require("net");
 
 
+// Make a socket server.
 const server = new net.Server();
 
-
 server.on("close", function (data) {
-  console.log("close");
+  console.log("The socket server was closed.");
 })
 
+
+// Map object to save sockets which connected this server with.
 const acceptedSockets = new Map();
 const socketNames = new Map();
+
+
 server.on("connection", function (socket) {
-  socket.write("コネクション成功");
+  socket.write("Completed connecting the server with you.");
   // 接続してきたSocketクライアントの情報をここで取得
   const port = socket.remotePort;
   const address = socket.remoteAddress;
@@ -21,8 +25,8 @@ server.on("connection", function (socket) {
     // 初回接続クライアントの場合,受付済みSocket一覧に保持する
     acceptedSockets.set(clientKey, socket);
   }
-  socket.on("data", function (data) {
 
+  socket.on("data", function (data) {
     // クライアントツール上で最初に入力した内容を当該のクライアント名として保存する
     if (socketNames.has(clientKey) !== true) {
       socketNames.set(clientKey, data);
