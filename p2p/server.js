@@ -1,3 +1,4 @@
+const EventEmitter = require("node:events");
 const net = require("node:net");
 const readline = require('readline');
 const terminal = readline.createInterface({
@@ -30,25 +31,24 @@ function connectCli() {
   const p = new Promise((resolve, reject) => {
     // 接続先のIPアドレスを入力させる
     terminal.question("接続先のIPアドレスを入力して下さい: ", function (input) {
-      if (input.length > 0) {
-        ipAddressToConnect = input;
-        terminal.question("接続先のポート番号を入力して下さい: ", function (input) {
-          if (input.length > 0) {
-            portNumberToConnect = parseInt(input);
-            return resolve([ipAddressToConnect, portNumberToConnect]);
-          } else {
-            return reject("ポート番号が入力されていません");
-          }
-        });
-      } else {
+      if (input.length === 0) {
+        // クライアントからの待受モードに変更する
         return resolve(null);
-        // return reject("IPアドレスが入力されていません");
       }
+      ipAddressToConnect = input;
+      terminal.question("接続先のポート番号を入力して下さい: ", function (input) {
+        if (input.length > 0) {
+          portNumberToConnect = parseInt(input);
+          return resolve([ipAddressToConnect, portNumberToConnect]);
+        } else {
+          return reject("ポート番号が入力されていません");
+        }
+      });
     });
   });
   p.then((result) => {
     if (result === null) {
-      return ;
+      return;
     }
     // 入力された接続先情報をもとにSocketを作成する
     const client = net.connect(result[1], result[0], () => {
@@ -107,7 +107,7 @@ const server = new net.Server();
 
 // アドレスの bind とポートの listenを listen()メソッドが
 // 一括で行う
-server.listen(specifyPort, specifyHost, queue, (server) => {
+server.listen(specifyPort, specifyHost, queue, () => {
   console.log("サーバーを起動しました");
   connectCli();
 });
@@ -140,11 +140,11 @@ server.on("connection", function (socket) {
       getCli(allowedSocket.get(clientKey), "Message to server: ");
     } else {
       // if (data.toString() === "妥当な接続") {
-        // 接続してきたクライアントに対して,接続完了メッセージを送信
-        socket.write(">>>接続完了");
-        allowedSocket.set(clientKey, socket);
-        // 接続が許可された場合は,サーバー側も入力を可能にする
-        getCli(socket)
+      // 接続してきたクライアントに対して,接続完了メッセージを送信
+      socket.write(">>>接続完了");
+      allowedSocket.set(clientKey, socket);
+      // 接続が許可された場合は,サーバー側も入力を可能にする
+      getCli(socket)
       // } else {
       //   // 接続クライアントを拒否したい場合
       //   const destroyedSocket = socket.destroy();
