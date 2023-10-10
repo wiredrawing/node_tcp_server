@@ -115,36 +115,53 @@ server.listen(specifyPort, specifyHost, queue, () => {
 
 // 接続を許可されたSocketのみを保持するMapオブジェクト
 const allowedSocket = new Map();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // Socketのacceptをconnectionイベントで受け取る
-server.on("connection", function (socket) {
+server.on("connection", function (acceptedSocket) {
   // 本サーバーに接続してきたクライアントの情報を取得
-  const sourceAddress = socket.remoteAddress;
+  const sourceAddress = acceptedSocket.remoteAddress;
   const sourcePort = socket.remotePort;
   const clientKey = sourceAddress + ":" + sourcePort;
+
   console.log(`[通知]: ${sourceAddress}:${sourcePort} が接続してきました`);
   // 接続してきたクライアントの初回メッセージを一旦取得
-  socket.on("data", function (data) {
+  acceptedSocket.on("data", function (data) {
     // 当該サーバーに接続できるクライアントは1つのみ
     if (allowedSocket.size !== 0 && allowedSocket.has(clientKey) !== true) {
-      socket.write("現在サーバーは満員です またのご利用をお待ちしております");
-      socket = socket.destroy();
-      if (socket.destroyed) {
+      acceptedSocket.write("現在サーバーは満員です またのご利用をお待ちしております");
+      acceptedSocket = acceptedSocket.destroy();
+      if (acceptedSocket.destroyed) {
         console.log(`[通知]: ${sourceAddress}:${sourcePort} の接続を拒否しました.`);
+        // とりあえず値を返す
+        return false;
       }
     }
 
-
+    // アクセスしてきたクライアントが既に許可ずみの場合
     if (allowedSocket.has(clientKey)) {
       console.log("以下発言は,許可されたクライアントのメッセージです");
       console.log(data.toString());
-      getCli(allowedSocket.get(clientKey), "Message to server: ");
-    } else {
+      return getCli(allowedSocket.get(clientKey), "Message to server: ");
+    }
       // if (data.toString() === "妥当な接続") {
       // 接続してきたクライアントに対して,接続完了メッセージを送信
-      socket.write(">>>接続完了");
-      allowedSocket.set(clientKey, socket);
+    allowedSocket.write(">>>接続完了");
+      allowedSocket.set(clientKey, allowedSocket);
       // 接続が許可された場合は,サーバー側も入力を可能にする
-      getCli(socket)
+      return getCli(allowedSocket);
       // } else {
       //   // 接続クライアントを拒否したい場合
       //   const destroyedSocket = socket.destroy();
@@ -152,6 +169,5 @@ server.on("connection", function (socket) {
       //     console.log(`[通知]: ${sourceAddress}:${sourcePort} の接続を拒否しました.`);
       //   }
       // }
-    }
   });
 });
