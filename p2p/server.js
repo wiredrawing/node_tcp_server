@@ -1,4 +1,3 @@
-const EventEmitter = require("node:events");
 const net = require("node:net");
 const readline = require('readline');
 const terminal = readline.createInterface({
@@ -6,26 +5,37 @@ const terminal = readline.createInterface({
   output: process.stdout
 });
 const queue = 1;
-let isAccepting = false;
 
-// サーバープログラム上で入力を可能にする
+
+
+/**
+ * 新規クライアントがサーバーへ接続し許可した場合
+ * サーバープログラム上でのチャット機能を8可能にする
+ * @param socket
+ * @param promptMessage
+ */
 function getCli(socket, promptMessage = ">>> ") {
-  terminal.question(promptMessage, function (input) {
+  return terminal.question(promptMessage, function (input) {
     if (input.length > 0) {
       if (input === "exit") {
         socket.destroy();
+        if (socket.destroyed) {
+          console.log("サーバーとの接続を正しく切断しました");
+          return;
+        }
       } else {
         console.log("入力された内容: " + input)
         const res = socket.write(input);
         console.log(res);
       }
     }
-    getCli(socket, promptMessage);
+    // 再帰的に自身を呼び出す
+    return getCli(socket, promptMessage);
   })
 }
 
 // サーバー起動後,サーバープログラム内で他クライアントに接続できるようにする
-function connectCli() {
+function cliForClient() {
   let ipAddressToConnect = "";
   let portNumberToConnect = 0;
   const p = new Promise((resolve, reject) => {
@@ -48,6 +58,7 @@ function connectCli() {
   });
   p.then((result) => {
     if (result === null) {
+      console.log("クライアントプログラムモードを中止しました");
       return;
     }
     // 入力された接続先情報をもとにSocketを作成する
@@ -61,21 +72,22 @@ function connectCli() {
       console.log(data);
       client.write("OK");
 
-      function interactionToServer(client) {
-
-        terminal.question('>> ', (answer) => {
-
-          if (answer.length > 0) {
-            // readline.close();
-            // Send my name to server.
-            client.write((answer));
-          }
-          interactionToServer(client);
-        });
-
-      }
-
-      interactionToServer(client);
+      // function interactionToServer(client) {
+      //
+      //   terminal.question('>> ', (answer) => {
+      //
+      //     if (answer.length > 0) {
+      //       // readline.close();
+      //       // Send my name to server.
+      //       client.write((answer));
+      //     }
+      //     interactionToServer(client);
+      //   });
+      //
+      // }
+      //
+      // interactionToServer(client);
+      getCli(client, "Message to server: ");
       // getCli(client, "Message to server: ");
     });
     client.on("data", function (data) {
@@ -84,7 +96,7 @@ function connectCli() {
       // getCli(client, "Message to server: ");
     });
   }).catch((error) => {
-    connectCli();
+    cliForClient();
   });
 }
 
@@ -109,7 +121,7 @@ const server = new net.Server();
 // 一括で行う
 server.listen(specifyPort, specifyHost, queue, () => {
   console.log("サーバーを起動しました");
-  connectCli();
+  cliForClient();
 });
 
 
@@ -131,37 +143,42 @@ const allowedSocket = new Map();
 
 // Socketのacceptをconnectionイベントで受け取る
 server.on("connection", function (acceptedSocket) {
-  // 本サーバーに接続してきたクライアントの情報を取得
-  const sourceAddress = acceptedSocket.remoteAddress;
-  const sourcePort = socket.remotePort;
-  const clientKey = sourceAddress + ":" + sourcePort;
+  try {
+    // 本サーバーに接続してきたクライアントの情報を取得
+    const sourceAddress = acceptedSocket.remoteAddress;
+    const sourcePort = acceptedSocket.remotePort;
+    const clientKey = sourceAddress + ":" + sourcePort;
 
-  console.log(`[通知]: ${sourceAddress}:${sourcePort} が接続してきました`);
-  // 接続してきたクライアントの初回メッセージを一旦取得
-  acceptedSocket.on("data", function (data) {
-    // 当該サーバーに接続できるクライアントは1つのみ
-    if (allowedSocket.size !== 0 && allowedSocket.has(clientKey) !== true) {
-      acceptedSocket.write("現在サーバーは満員です またのご利用をお待ちしております");
-      acceptedSocket = acceptedSocket.destroy();
-      if (acceptedSocket.destroyed) {
-        console.log(`[通知]: ${sourceAddress}:${sourcePort} の接続を拒否しました.`);
-        // とりあえず値を返す
-        return false;
+    console.log(`[通知]: ${sourceAddress}:${sourcePort} が接続してきました`);
+    // 接続してきたクライアントの初回メッセージを一旦取得
+    acceptedSocket.on("data", function (data) {
+      // 当該サーバーに接続できるクライアントは1つのみ
+      if (allowedSocket.size !== 0 && allowedSocket.has(clientKey) !== true) {
+        acceptedSocket.write("現在サーバーは満員です またのご利用をお待ちしております");
+        acceptedSocket = acceptedSocket.destroy();
+        if (acceptedSocket.destroyed) {
+          console.log(`[通知]: ${sourceAddress}:${sourcePort} の接続を拒否しました.`);
+          // クライアントとのチャットが終了したら再度,クライアントプログラムを開始する
+          cliForClient();
+          // とりあえず値を返す
+          return false;
+        }
       }
-    }
 
-    // アクセスしてきたクライアントが既に許可ずみの場合
-    if (allowedSocket.has(clientKey)) {
-      console.log("以下発言は,許可されたクライアントのメッセージです");
-      console.log(data.toString());
-      return getCli(allowedSocket.get(clientKey), "Message to server: ");
-    }
+      // アクセスしてきたクライアントが既に許可ずみの場合
+      if (allowedSocket.has(clientKey)) {
+        console.log("以下発言は,許可されたクライアントのメッセージです");
+        console.log(data.toString());
+        return getCli(allowedSocket.get(clientKey), "Message to server: ");
+      }
       // if (data.toString() === "妥当な接続") {
       // 接続してきたクライアントに対して,接続完了メッセージを送信
-    allowedSocket.write(">>>接続完了");
-      allowedSocket.set(clientKey, allowedSocket);
+      // 許可したクライアントをリストに追加
+      allowedSocket.set(clientKey, acceptedSocket);
+      allowedSocket.get(clientKey).write(">>>接続完了");
+
       // 接続が許可された場合は,サーバー側も入力を可能にする
-      return getCli(allowedSocket);
+      return getCli(allowedSocket.get(clientKey));
       // } else {
       //   // 接続クライアントを拒否したい場合
       //   const destroyedSocket = socket.destroy();
@@ -169,5 +186,8 @@ server.on("connection", function (acceptedSocket) {
       //     console.log(`[通知]: ${sourceAddress}:${sourcePort} の接続を拒否しました.`);
       //   }
       // }
-  });
+    });
+  } catch (e) {
+    console.log(e);
+  }
 });
